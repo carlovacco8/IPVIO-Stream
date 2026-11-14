@@ -26,14 +26,20 @@ jobs:
       - name: Build debug APK
         shell: bash
         run: ./gradlew --no-daemon assembleDebug 2>&1 | tee build.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ipvio-stream-debug
+          path: app/build/outputs/apk/debug/*.apk
       - name: Report errors as annotations
-        # Logs need a sign-in; annotations are public, so the failing lines are readable from the run page
+        # Logs need a sign-in; annotations are public, so the failing lines are readable from the run page.
+        # Only reports, never fails the job itself.
         if: always()
+        continue-on-error: true
         shell: bash
         run: |
           for f in test.log build.log; do
             [ -f "$f" ] || continue
-            lines=$(grep -E -A4 "FAILED|^e: |What went wrong|AssertionError|Exception:" "$f" | grep -v "^\s*at org\.\|^\s*at java\.\|^\s*at jdk\.\|^\s*at kotlin\." | head -60)
+            lines=$(grep -E -A4 "FAILED|^e: |What went wrong|AssertionError|Exception:" "$f" | grep -v "^\s*at org\.\|^\s*at java\.\|^\s*at jdk\.\|^\s*at kotlin\." | head -60 || true)
             [ -z "$lines" ] && continue
             echo "$lines" | split -l 6 - chunk_
             n=0
@@ -44,7 +50,4 @@ jobs:
             done
             rm -f chunk_*
           done
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ipvio-stream-debug
-          path: app/build/outputs/apk/debug/*.apk
+          exit 0
