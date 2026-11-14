@@ -40,6 +40,8 @@ object TapLogic {
 
     /** Can this address run through the buffer? Only continuous streams (TS), no playlists (HLS/DASH) or files. */
     fun tappable(url: String): Boolean {
+        // Protected streams (DRM) cannot be buffered or recorded on the device
+        if (DrmLogic.has(url)) return false
         val u = url.lowercase().substringBefore('?')
         if (!u.startsWith("http://") && !u.startsWith("https://")) return false
         if (u.endsWith(".m3u8") || u.endsWith(".m3u") || u.endsWith(".mpd") || u.endsWith(".mp4") || u.endsWith(".mkv")) return false

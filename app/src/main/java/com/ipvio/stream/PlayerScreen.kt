@@ -86,7 +86,6 @@ import androidx.media3.common.VideoSize
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
@@ -163,8 +162,8 @@ fun PlayerScreen(req: PlayReq, zapList: List<Item>, liveAll: List<Item>, seriesI
             .setWakeMode(C.WAKE_MODE_NETWORK)
             // "tap://" = live buffer on the device (rewind, recording), everything else as before
             .setMediaSourceFactory(
-                DefaultMediaSourceFactory(ctx)
-                    .setDataSourceFactory(TapAwareDataSource.Factory(HostFailover.DataSourceWrapper.Factory(DefaultDataSource.Factory(ctx, http))))
+                // DRM (Widevine, PlayReady, ClearKey) from the playlist's #KODIPROP lines, see DrmPlayback
+                DrmPlayback.factory(ctx, TapAwareDataSource.Factory(HostFailover.DataSourceWrapper.Factory(DefaultDataSource.Factory(ctx, http))), http)
                     // Short network hiccups are retried inside the player (several times) instead of ending in an error
                     .setLoadErrorHandlingPolicy(IptvLoadErrorPolicy())
             )
@@ -872,7 +871,7 @@ fun PlayerScreen(req: PlayReq, zapList: List<Item>, liveAll: List<Item>, seriesI
                 notice = "Zu wenig freier Speicher für den Live-Puffer"
                 if (!openStream(player, playUrl, 0L)) { msg = PlayerLogic.MSG_FORMAT; buffering = false }
             }
-        } else if (loaded != playUrl) {
+        } else if (loaded != DrmLogic.base(playUrl)) {
             LiveTimeshift.stop()
             // Unknown format (e.g. without a matching module): notice instead of a crash
             val item = if (cur.live) null else SubSearch.item(ctx, playUrl, subKey())
@@ -1905,7 +1904,8 @@ private fun NextPill(remain: () -> Long, auto: Boolean, showOk: Boolean, onClick
  * (formerly with .mpd without the DASH module: crash on this line). false = not playable.
  */
 internal fun openStream(player: androidx.media3.exoplayer.ExoPlayer, url: String, startMs: Long, item: MediaItem? = null): Boolean = try {
-    player.setMediaItem(item ?: MediaItem.fromUri(url), startMs)
+    // Addresses with DRM details: real address plus DRM configuration (unchanged otherwise)
+    player.setMediaItem(DrmPlayback.prepare(item ?: MediaItem.fromUri(url)), startMs)
     player.prepare()
     player.playWhenReady = true
     true

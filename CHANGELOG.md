@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Player: DRM support for M3U playlists (T-026). `#KODIPROP:inputstream.adaptive.*` lines (license_type, license_key, drm_legacy, manifest_type, license_headers) are read: Widevine and PlayReady with a license server, ClearKey with a license server or local keys (`kid:key`, JSON). Protected streams skip the live buffer and recording. Existing playlists need a refresh to pick up the lines. Not device tested yet
 
 ## 1.4.1
 - Fix: 1.4 did not open after the update on user devices. R8 over the whole app (T-024) is switched off again (`enable = false` in app/build.gradle.kts, the rollback from ADR 0005); versionCode 6. Cause not confirmed by a crash log (unverified). Install 1.4.1 over 1.4; data is kept (same signature)

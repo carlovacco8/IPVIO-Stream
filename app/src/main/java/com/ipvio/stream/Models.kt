@@ -320,10 +320,14 @@ object M3uParser {
         var group = "Sonstige"
         var header = false
         var k = 0
+        // #KODIPROP lines (DRM, manifest type) of the next entry: above or below its #EXTINF line
+        var props: ArrayList<String>? = null
         for (line in lines) {
             val l = line.trim()
             if (!header && l.startsWith("#EXTM3U")) { header = true; onHeader(l) }
-            if (l.startsWith("#EXTINF")) {
+            if (DrmLogic.isPropLine(l)) {
+                (props ?: ArrayList<String>(4).also { props = it }).add(l)
+            } else if (l.startsWith("#EXTINF")) {
                 info = l
                 name = l.substringAfterLast(',').trim()
                 group = attr(l, "group-title")?.ifBlank { null } ?: "Sonstige"
@@ -331,10 +335,11 @@ object M3uParser {
                 val n = name
                 val inf = info
                 if (n != null && inf != null) {
-                    onEntry(Entry(inf, n, group, l))
+                    val p = props
+                    onEntry(Entry(inf, n, group, if (p == null) l else DrmLogic.withProps(l, p)))
                     if (++k % 2000 == 0) check?.invoke()
                 }
-                name = null; info = null
+                name = null; info = null; props = null
             }
         }
     }
@@ -355,10 +360,12 @@ object M3uParser {
     private fun classify(e: Entry, st: Stats, langOf: LangOf): Kinded? {
         if (isSeparator(e.name)) return null
         val m = if (mayBeEpisode(e.name)) SE.find(e.name) else null
-        val isSeriesUrl = e.url.contains("/series/")
-        val isMovie = e.url.contains("/movie/") || isVideoFile(e.url) || langOf.vod(e.group)
+        // Kind from the address without DRM details (they would hide the ".mp4" ending)
+        val url = DrmLogic.base(e.url)
+        val isSeriesUrl = url.contains("/series/")
+        val isMovie = url.contains("/movie/") || isVideoFile(url) || langOf.vod(e.group)
         // Stalker channels are always live, even in groups like "ENGLISH | PREMIUM MOVIES" (movie channels)
-        val stalkerLive = e.url.startsWith("stalker://") && e.url.contains("/live/")
+        val stalkerLive = url.startsWith("stalker://") && url.contains("/live/")
         val kind = if (stalkerLive) Kind.LIVE else if (m != null || isSeriesUrl) Kind.SERIES else if (isMovie) Kind.MOVIE else Kind.LIVE
         val lang = langOf.of(e.group, e.name, kind == Kind.LIVE)
         val countKey = if (kind == Kind.SERIES) (m?.groupValues?.get(1) ?: e.name).trim().lowercase() else null

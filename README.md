@@ -52,6 +52,7 @@ Allow "Install unknown apps" for Downloader (or your file manager) when asked, t
 - Quality selection with 4K check, fallback to another source on errors or stuttering
 - Buffer levels, connection watchdog, endless reconnect for live TV, reconnect after network change and standby
 - HLS, MPEG-DASH and MPEG-TS
+- DRM from M3U `#KODIPROP` lines: Widevine, PlayReady, ClearKey (license server or `kid:key`)
 - Aspect ratio/zoom, frame-rate matching, technical info, clock overlay, sleep timer
 
 **Personal**
