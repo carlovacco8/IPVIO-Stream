@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # contents: write = publish the APK as a release (fixed public link for the TV's Downloader app)
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -30,6 +33,19 @@ jobs:
         with:
           name: ipvio-stream-debug
           path: app/build/outputs/apk/debug/*.apk
+      - name: Publish APK as release "latest-build"
+        # Public link that never changes:
+        # https://github.com/<owner>/<repo>/releases/download/latest-build/IPVIO-Stream-DRM.apk
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          cp "$apk" IPVIO-Stream-DRM.apk
+          gh release delete latest-build --cleanup-tag -y || true
+          gh release create latest-build IPVIO-Stream-DRM.apk --target "$GITHUB_SHA" \
+            --title "Latest build (DRM)" --notes "Debug build of commit $GITHUB_SHA. Installs next to the official app (package com.ipvio.stream.test)." --prerelease
       - name: Report errors as annotations
         # Logs need a sign-in; annotations are public, so the failing lines are readable from the run page.
         # Only reports, never fails the job itself.
