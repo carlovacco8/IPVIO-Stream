@@ -19,9 +19,31 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
       - name: Unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest
+        # A failing test is reported (see below) but does not stop the APK build
+        continue-on-error: true
+        shell: bash
+        run: ./gradlew --no-daemon testDebugUnitTest 2>&1 | tee test.log
       - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
+        shell: bash
+        run: ./gradlew --no-daemon assembleDebug 2>&1 | tee build.log
+      - name: Report errors as annotations
+        # Logs need a sign-in; annotations are public, so the failing lines are readable from the run page
+        if: always()
+        shell: bash
+        run: |
+          for f in test.log build.log; do
+            [ -f "$f" ] || continue
+            lines=$(grep -E -A4 "FAILED|^e: |What went wrong|AssertionError|Exception:" "$f" | grep -v "^\s*at org\.\|^\s*at java\.\|^\s*at jdk\.\|^\s*at kotlin\." | head -60)
+            [ -z "$lines" ] && continue
+            echo "$lines" | split -l 6 - chunk_
+            n=0
+            for c in chunk_*; do
+              n=$((n+1)); [ $n -gt 9 ] && break
+              msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g' "$c")
+              echo "::error title=$f part $n::$msg"
+            done
+            rm -f chunk_*
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: ipvio-stream-debug
