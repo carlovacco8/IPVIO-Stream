@@ -706,7 +706,8 @@ fun PlayerScreen(req: PlayReq, zapList: List<Item>, liveAll: List<Item>, seriesI
             override fun onPlayerError(e: PlaybackException) {
                 pError = true
                 val status = httpStatusOf(e)
-                Diag.report("Wiedergabe: " + e.errorCodeName + (if (status > 0) " (HTTP $status)" else ""))
+                Diag.report("Wiedergabe: " + e.errorCodeName + (if (status > 0) " (HTTP $status)" else "") +
+                    (if (DrmLogic.has(cur.url)) " · DRM " + (e.cause?.javaClass?.simpleName ?: "") + " " + (e.cause?.message ?: "").take(60) else ""))
                 val decoder = e.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
                     e.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
                     e.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ||
@@ -1909,10 +1910,8 @@ internal fun openStream(player: androidx.media3.exoplayer.ExoPlayer, url: String
     player.prepare()
     player.playWhenReady = true
     true
-} catch (e: IllegalStateException) {
-    false
-} catch (e: IllegalArgumentException) {
-    false
 } catch (e: Exception) {
+    // Shown under Settings > Diagnostics ("Letzter Fehler"): which part refused the stream
+    Diag.report("Öffnen: " + e.javaClass.simpleName + " " + (e.message ?: "").take(100))
     false
 }

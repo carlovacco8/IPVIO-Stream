@@ -5,6 +5,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
 import androidx.media3.exoplayer.drm.DefaultDrmSessionManagerProvider
 import androidx.media3.exoplayer.drm.DrmSessionManager
@@ -18,6 +19,12 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
  * (with license server or with local keys "kid:key").
  */
 object DrmPlayback {
+    /** HTTP headers of the stream being opened (from the playlist), added to every request of the stream. */
+    @Volatile private var streamHeaders: Map<String, String> = emptyMap()
+
+    /** DRM details of the last opened protected stream, for the diagnostics page (no keys, no address). */
+    @Volatile var last: String? = null
+        private set
 
     /**
      * Turns an address with DRM details into a MediaItem with DRM configuration (keeps subtitles etc. of [item]).
@@ -25,7 +32,10 @@ object DrmPlayback {
      */
     fun prepare(item: MediaItem): MediaItem {
         val uri = item.localConfiguration?.uri?.toString() ?: return item
-        val info = DrmLogic.of(uri) ?: return item
+        val info = DrmLogic.of(uri)
+        streamHeaders = info?.streamHeaders ?: emptyMap()
+        if (info == null) return item
+        last = DrmLogic.describe(info)
         val b = item.buildUpon().setUri(DrmLogic.base(uri)).setTag(info)
         when (info.mime) {
             "mpd" -> b.setMimeType(MimeTypes.APPLICATION_MPD)
@@ -70,5 +80,10 @@ object DrmPlayback {
 
     /** Media source factory with DRM support (used by the main player and the multi view). */
     fun factory(ctx: android.content.Context, data: DataSource.Factory, http: HttpDataSource.Factory): DefaultMediaSourceFactory =
-        DefaultMediaSourceFactory(ctx).setDataSourceFactory(data).setDrmSessionManagerProvider(provider(http))
+        DefaultMediaSourceFactory(ctx)
+            .setDataSourceFactory(ResolvingDataSource.Factory(data) { spec ->
+                val h = streamHeaders
+                if (h.isEmpty()) spec else spec.withAdditionalHeaders(h)
+            })
+            .setDrmSessionManagerProvider(provider(http))
 }

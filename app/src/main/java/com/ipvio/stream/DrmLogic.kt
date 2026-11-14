@@ -41,7 +41,9 @@ object DrmLogic {
         val licenseUrl: String? = null,
         val headers: Map<String, String> = emptyMap(),
         val clearKeys: String? = null,
-        val mime: String? = null
+        val mime: String? = null,
+        /** HTTP headers for the stream itself (manifest and segments): User-Agent, Referer … */
+        val streamHeaders: Map<String, String> = emptyMap()
     ) {
         /** Nothing usable: no DRM system and no manifest hint. */
         val empty: Boolean get() = type == null && mime == null
@@ -49,8 +51,8 @@ object DrmLogic {
 
     private const val P = "inputstream.adaptive."
 
-    /** Is this line one of the property lines that belong to the next entry? */
-    fun isPropLine(l: String): Boolean = l.startsWith("#KODIPROP:", ignoreCase = true)
+    /** Is this line one of the property lines that belong to the next entry (#KODIPROP, #EXTVLCOPT)? */
+    fun isPropLine(l: String): Boolean = l.startsWith("#KODIPROP:", ignoreCase = true) || l.startsWith("#EXTVLCOPT:", ignoreCase = true)
 
     /** True if the address carries DRM details. */
     fun has(url: String): Boolean = url.indexOf(MARK) >= 0
@@ -70,6 +72,7 @@ object DrmLogic {
         var key: String? = null
         var mime: String? = null
         val headers = LinkedHashMap<String, String>()
+        val stream = LinkedHashMap<String, String>()
         for (raw in lines) {
             val l = raw.trim()
             if (!isPropLine(l)) continue
@@ -83,7 +86,12 @@ object DrmLogic {
                 P + "license_type" -> type = typeOf(v) ?: type
                 P + "license_key" -> key = v
                 P + "manifest_type" -> mime = when (v.lowercase()) { "mpd", "dash" -> "mpd"; "hls" -> "hls"; else -> mime }
-                P + "license_headers", P + "stream_headers" -> headers.putAll(headerList(v))
+                P + "license_headers" -> headers.putAll(headerList(v))
+                P + "stream_headers", P + "manifest_headers" -> headerList(v).let { headers.putAll(it); stream.putAll(it) }
+                // VLC options
+                "http-user-agent" -> { stream["User-Agent"] = v; headers["User-Agent"] = v }
+                "http-referrer", "http-referer" -> { stream["Referer"] = v; headers["Referer"] = v }
+                "http-origin" -> { stream["Origin"] = v; headers["Origin"] = v }
                 P + "drm_legacy" -> {
                     // system|license|headers
                     val parts = v.split('|')
@@ -94,7 +102,7 @@ object DrmLogic {
             }
         }
         if (type == null && key != null) type = guessType(key)
-        val info = build(type, key, headers, mime)
+        val info = build(type, key, headers, mime).copy(streamHeaders = stream)
         return if (info.empty) null else info
     }
 
@@ -212,6 +220,7 @@ object DrmLogic {
         put("k", info.clearKeys)
         put("m", info.mime)
         for ((k, v) in info.headers) put("h." + k, v)
+        for ((k, v) in info.streamHeaders) put("s." + k, v)
         return base(url) + MARK + sb
     }
 
@@ -224,6 +233,7 @@ object DrmLogic {
         var keys: String? = null
         var mime: String? = null
         val headers = LinkedHashMap<String, String>()
+        val stream = LinkedHashMap<String, String>()
         for (p in url.substring(i + MARK.length).split('&')) {
             val eq = p.indexOf('=')
             if (eq <= 0) continue
@@ -235,15 +245,43 @@ object DrmLogic {
                 k == "k" -> keys = v
                 k == "m" -> mime = v
                 k.startsWith("h.") -> headers[k.substring(2)] = v
+                k.startsWith("s.") -> stream[k.substring(2)] = v
             }
         }
-        return Info(type, lic, headers, keys, mime).takeUnless { it.empty }
+        return Info(type, lic, headers, keys, mime, stream).takeUnless { it.empty }
     }
 
     /** Entry address plus the property lines collected above it. */
     fun withProps(url: String, props: List<String>): String {
         if (props.isEmpty()) return url
         val info = fromProps(props) ?: return url
-        return attach(url, info)
+        // Kodi style headers after the address ("…/manifest.mpd|User-Agent=…&Referer=…"): only for DRM entries,
+        // other entries keep their address exactly as before (their IDs, favorites and history stay the same)
+        val bar = url.indexOf('|')
+        val clean = if (bar > 0) url.substring(0, bar).trim() else url
+        val extra = if (bar > 0) headerList(url.substring(bar + 1)) else emptyMap()
+        val streamH = LinkedHashMap(info.streamHeaders).apply { putAll(extra) }
+        val licH = LinkedHashMap(info.headers).apply { extra.forEach { (k, v) -> putIfAbsent(k, v) } }
+        // DRM streams from #KODIPROP lines are DASH unless the address says HLS (inputstream.adaptive)
+        val mime = info.mime ?: if (info.type == null) null else guessMime(clean)
+        return attach(clean, info.copy(headers = licH, streamHeaders = streamH, mime = mime))
     }
+
+    /** Format of a protected stream by its address: HLS, a plain file (left to the player) or otherwise DASH. */
+    internal fun guessMime(url: String): String? {
+        val p = url.substringBefore('?').substringBefore('#').lowercase()
+        return when {
+            p.endsWith(".m3u8") || p.endsWith(".m3u") -> "hls"
+            p.endsWith(".mp4") || p.endsWith(".mkv") || p.endsWith(".ts") || p.endsWith(".avi") -> null
+            else -> "mpd"
+        }
+    }
+
+    /** Short description for the diagnostics page, without keys or addresses. */
+    fun describe(i: Info): String = listOfNotNull(
+        i.type?.name?.lowercase() ?: "-",
+        when { i.clearKeys != null -> "keys"; i.licenseUrl != null -> "license server"; else -> "no key" },
+        i.mime,
+        if (i.streamHeaders.isNotEmpty()) "headers: " + i.streamHeaders.keys.joinToString(",") else null
+    ).joinToString(" · ")
 }

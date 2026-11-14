@@ -2,6 +2,7 @@
 
 ## Unreleased
 - Tests: `LoadLogicTest.vorauswahlNachGeraetesprache` expected the old preselection without untagged titles ("?"); updated to the documented behaviour of `LoadLogic.systemPreselect` (CI was red since the change)
+- Player: DRM streams without ".mpd" in the address are opened as DASH; Kodi headers after the address ("|User-Agent=…") and #EXTVLCOPT http options are applied to DRM streams; Settings > Diagnostics shows DRM channel count and open errors
 - Player: DRM support for M3U playlists (T-026). `#KODIPROP:inputstream.adaptive.*` lines (license_type, license_key, drm_legacy, manifest_type, license_headers) are read: Widevine and PlayReady with a license server, ClearKey with a license server or local keys (`kid:key`, JSON). Protected streams skip the live buffer and recording. Existing playlists need a refresh to pick up the lines. Not device tested yet
 
 ## 1.4.1

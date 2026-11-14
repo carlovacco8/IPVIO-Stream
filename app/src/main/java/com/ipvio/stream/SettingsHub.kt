@@ -889,6 +889,7 @@ private fun DiagPage(ctx: Context, reload: () -> Unit) {
         "Programm (EPG)" to "${Xmltv.status} · ${Xmltv.channelCount} Sender",
         "Metadaten" to (if (MetaRepo.enabled()) (if (Classifier.running) "lädt ${Classifier.progress}/${Classifier.total}" else "aktiv") else "kein TMDB-Schlüssel"),
         "Speicher" to (Mem.totalMb(ctx).toString() + " MB · " + listOf("wenig", "mittel", "viel")[Mem.tier(ctx)]),
+        "DRM" to (items.count { DrmLogic.has(it.url) }.toString() + " · " + (DrmPlayback.last ?: "-")),
         "Letzter Fehler" to err,
         "Fehler seit Start" to Diag.errorCount.toString(),
         "Bildschirm wach" to (if (ScreenAwake.isOn) Lang.tr("an") + " (" + ScreenAwake.reasons + ")" else Lang.tr("aus")) +

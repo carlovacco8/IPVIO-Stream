@@ -58,6 +58,25 @@ class DrmLogicTest {
         assertNull(DrmLogic.of("http://a/b.ts"))
     }
 
+    @Test fun dashDefault_kodiHeaders_andVlcOptions() {
+        val u = DrmLogic.withProps("https://cdn.example/live/ch1/Manifest?tok=1|User-Agent=Mozilla%2F5.0&Referer=https://site.example/", listOf(
+            "#KODIPROP:inputstream.adaptive.license_type=clearkey",
+            "#KODIPROP:inputstream.adaptive.license_key=$kid:$key",
+            "#EXTVLCOPT:http-origin=https://site.example"))
+        assertEquals("https://cdn.example/live/ch1/Manifest?tok=1", DrmLogic.base(u))
+        val i = DrmLogic.of(u)!!
+        assertEquals("mpd", i.mime)
+        assertEquals(mapOf("Origin" to "https://site.example", "User-Agent" to "Mozilla/5.0", "Referer" to "https://site.example/"), i.streamHeaders)
+        assertEquals("hls", DrmLogic.guessMime("https://a/b/index.m3u8?x"))
+        assertNull(DrmLogic.guessMime("http://a/movie/1.mp4"))
+        assertEquals("clearkey · keys · mpd · headers: Origin,User-Agent,Referer", DrmLogic.describe(i))
+    }
+
+    @Test fun vlcOptionsWithoutDrm_leaveAddressUnchanged() {
+        val url = "http://srv/live/1.ts|User-Agent=X"
+        assertEquals(url, DrmLogic.withProps(url, listOf("#EXTVLCOPT:http-user-agent=X")))
+    }
+
     @Test fun parser_attachesPropsToEntry_andClassifiesByBase() {
         val m3u = """
             #EXTM3U
